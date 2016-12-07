@@ -5,6 +5,11 @@ import sys
 import pygame
 from pygame.locals import *
 
+import numpy as np
+
+from keras.models import Sequential
+from keras.layers import Dense, Activation
+from keras.optimizers import SGD
 
 FPS = 30
 SCREENWIDTH  = 288
@@ -14,6 +19,73 @@ PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
 BASEY        = SCREENHEIGHT * 0.79
 # image, sound and hitmask  dicts
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
+
+load_saved_pool = 0
+current_pool = []
+fitness = []
+current_model_idx = 0
+total_models = 12
+
+next_pipe_x = -1
+next_pipe_hole_y = -1
+generation = 1
+
+def save_pool():
+    for xi in range(total_models):
+        current_pool[xi].save_weights("model" + str(xi) + ".keras")
+
+def model_crossover(model_idx1, model_idx2):
+    global current_pool
+    weights1 = current_pool[model_idx1].get_weights()
+    weights2 = current_pool[model_idx2].get_weights()
+    weightsnew1 = weights1
+    weightsnew2 = weights2
+    weightsnew1[0] = weights2[0]
+    weightsnew2[0] = weights1[0]
+    return np.asarray([weightsnew1, weightsnew2])
+
+def model_mutate(weights):
+    for xi in range(len(weights)):
+        for yi in range(len(weights[xi])):
+            if random.uniform(0, 1) > 0.5:
+                change = random.uniform(-0.3,0.3)
+                weights[xi][yi] += change
+    return weights
+
+def predict_action(height, dist, pipe_height):
+    # The height, dist and pipe_height must be between 0 to 1 (Scaled by SCREENHEIGHT)
+    height = min(SCREENHEIGHT, height) / SCREENHEIGHT - 0.5
+    dist = dist / 450 - 0.5 # Max pipe distance from player will be 450
+    pipe_height = min(SCREENHEIGHT, pipe_height) / SCREENHEIGHT - 0.5
+    # print(height, dist, pipe_height)
+    neural_input = np.asarray([height, dist, pipe_height])
+    neural_input = np.atleast_2d(neural_input)
+    output_prob = model.predict(neural_input, 1)[0]
+    print(output_prob)
+    if output_prob[0] <= 0.5:
+        # Perform the jump action
+        return 1
+    return 2
+
+# Initialize all models
+for i in range(total_models):
+    model = Sequential()
+    model.add(Dense(output_dim=7, input_dim=3))
+    model.add(Activation("sigmoid"))
+    model.add(Dense(output_dim=1))
+    model.add(Activation("sigmoid"))
+
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(loss="mse", optimizer=sgd, metrics=["accuracy"])
+    current_pool.append(model)
+    fitness.append(-100)
+
+if load_saved_pool:
+    for i in range(total_models):
+        current_pool[i].load_weights("model"+str(i)+".keras")
+
+for i in range(total_models):
+    print(current_pool[i].get_weights())
 
 # list of all possible players (tuple of 3 positions of flap)
 PLAYERS_LIST = (
@@ -126,64 +198,24 @@ def main():
         )
 
         movementInfo = showWelcomeAnimation()
+        global fitness
+        global current_model_idx
+        fitness[current_model_idx] = 0
         crashInfo = mainGame(movementInfo)
         showGameOverScreen(crashInfo)
 
 
 def showWelcomeAnimation():
-    """Shows welcome screen animation of flappy bird"""
-    # index of player to blit on screen
-    playerIndex = 0
-    playerIndexGen = cycle([0, 1, 2, 1])
-    # iterator used to change playerIndex after every 5th iteration
-    loopIter = 0
-
-    playerx = int(SCREENWIDTH * 0.2)
-    playery = int((SCREENHEIGHT - IMAGES['player'][0].get_height()) / 2)
-
-    messagex = int((SCREENWIDTH - IMAGES['message'].get_width()) / 2)
-    messagey = int(SCREENHEIGHT * 0.12)
-
-    basex = 0
-    # amount by which base can maximum shift to left
-    baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
-
-    # player shm for up-down motion on welcome screen
-    playerShmVals = {'val': 0, 'dir': 1}
-
-    while True:
-        for event in pygame.event.get():
-            if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
-                pygame.quit()
-                sys.exit()
-            if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                # make first flap sound and return values for mainGame
-                SOUNDS['wing'].play()
-                return {
-                    'playery': playery + playerShmVals['val'],
-                    'basex': basex,
-                    'playerIndexGen': playerIndexGen,
-                }
-
-        # adjust playery, playerIndex, basex
-        if (loopIter + 1) % 5 == 0:
-            playerIndex = playerIndexGen.next()
-        loopIter = (loopIter + 1) % 30
-        basex = -((-basex + 4) % baseShift)
-        playerShm(playerShmVals)
-
-        # draw sprites
-        SCREEN.blit(IMAGES['background'], (0,0))
-        SCREEN.blit(IMAGES['player'][playerIndex],
-                    (playerx, playery + playerShmVals['val']))
-        SCREEN.blit(IMAGES['message'], (messagex, messagey))
-        SCREEN.blit(IMAGES['base'], (basex, BASEY))
-
-        pygame.display.update()
-        FPSCLOCK.tick(FPS)
+    return {
+                'playery': int((SCREENHEIGHT - IMAGES['player'][0].get_height()) / 2),
+                'basex': 0,
+                'playerIndexGen': cycle([0, 1, 2, 1]),
+            }
 
 
 def mainGame(movementInfo):
+    global fitness
+    global current_model_idx
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
@@ -207,6 +239,12 @@ def mainGame(movementInfo):
         {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': newPipe2[1]['y']},
     ]
 
+    global next_pipe_x
+    global next_pipe_hole_y
+
+    next_pipe_x = lowerPipes[0]['x']
+    next_pipe_hole_y = (lowerPipes[0]['y'] + (upperPipes[0]['y'] + IMAGES['pipe'][0].get_height()))/2
+
     pipeVelX = -4
 
     # player velocity, max velocity, downward accleration, accleration on flap
@@ -219,11 +257,19 @@ def mainGame(movementInfo):
 
 
     while True:
+        print(current_model_idx, fitness[current_model_idx], playery, next_pipe_x - int(SCREENWIDTH * 0.2), next_pipe_hole_y, generation)
+        fitness[current_model_idx] += 1
+        next_pipe_x += pipeVelX
+        if predict_action(playery, next_pipe_x, next_pipe_hole_y) == 1:
+            if playery > -2 * IMAGES['player'][0].get_height():
+                playerVelY = playerFlapAcc
+                playerFlapped = True
+                #SOUNDS['wing'].play()
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 pygame.quit()
                 sys.exit()
-            if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
+            if (event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP)):
                 if playery > -2 * IMAGES['player'][0].get_height():
                     playerVelY = playerFlapAcc
                     playerFlapped = True
@@ -244,16 +290,20 @@ def mainGame(movementInfo):
             }
 
         # check for score
-        playerMidPos = playerx + IMAGES['player'][0].get_width() / 2
+        pipe_idx = 0
+        playerMidPos = playerx
         for pipe in upperPipes:
-            pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width() / 2
+            pipe_idx += 1
+            pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width()
             if pipeMidPos <= playerMidPos < pipeMidPos + 4:
+                next_pipe_x = lowerPipes[pipe_idx+1]['x']
+                next_pipe_hole_y = (lowerPipes[pipe_idx+1]['y'] + (upperPipes[pipe_idx+1]['y'] + IMAGES['pipe'][pipe_idx+1].get_height())) / 2
                 score += 1
                 SOUNDS['point'].play()
 
         # playerIndex basex change
         if (loopIter + 1) % 3 == 0:
-            playerIndex = playerIndexGen.next()
+            playerIndex = next(playerIndexGen)
         loopIter = (loopIter + 1) % 30
         basex = -((-basex + 100) % baseShift)
 
@@ -298,53 +348,46 @@ def mainGame(movementInfo):
 
 
 def showGameOverScreen(crashInfo):
-    """crashes the player down ans shows gameover image"""
-    score = crashInfo['score']
-    playerx = SCREENWIDTH * 0.2
-    playery = crashInfo['y']
-    playerHeight = IMAGES['player'][0].get_height()
-    playerVelY = crashInfo['playerVelY']
-    playerAccY = 2
-
-    basex = crashInfo['basex']
-
-    upperPipes, lowerPipes = crashInfo['upperPipes'], crashInfo['lowerPipes']
-
-    # play hit and die sounds
-    SOUNDS['hit'].play()
-    if not crashInfo['groundCrash']:
-        SOUNDS['die'].play()
-
-    while True:
-        for event in pygame.event.get():
-            if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
-                pygame.quit()
-                sys.exit()
-            if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                if playery + playerHeight >= BASEY - 1:
-                    return
-
-        # player y shift
-        if playery + playerHeight < BASEY - 1:
-            playery += min(playerVelY, BASEY - playery - playerHeight)
-
-        # player velocity change
-        if playerVelY < 15:
-            playerVelY += playerAccY
-
-        # draw sprites
-        SCREEN.blit(IMAGES['background'], (0,0))
-
-        for uPipe, lPipe in zip(upperPipes, lowerPipes):
-            SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
-            SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
-
-        SCREEN.blit(IMAGES['base'], (basex, BASEY))
-        showScore(score)
-        SCREEN.blit(IMAGES['player'][1], (playerx,playery))
-
-        FPSCLOCK.tick(FPS)
-        pygame.display.update()
+    """Perform genetic updates here"""
+    global current_model_idx
+    global current_pool
+    global fitness
+    global generation
+    new_weights = []
+    if current_model_idx == total_models - 1:
+        # One generation done, perform updates
+        best_models = []
+        for select in range(5): # Assuming we have 12 nets in the pool
+            best_idx = -1
+            best_fitness = -100
+            for idx in range(total_models):
+                if fitness[idx] > best_fitness:
+                    best_fitness = fitness[idx]
+                    best_idx = idx
+            best_models.append(best_idx)
+            fitness[best_idx] = -100
+        for select in range(3):
+            # Choose the two best models and crossover with the next 3 to get 12 offsprings
+            idx1 = best_models[0]
+            idx2 = best_models[1]
+            idx3 = best_models[2 + select]
+            new_weights1 = model_crossover(idx1, idx3)
+            new_weights2 = model_crossover(idx2, idx3)
+            updated_weights1 = model_mutate(new_weights1[0])
+            updated_weights2 = model_mutate(new_weights1[1])
+            updated_weights3 = model_mutate(new_weights2[0])
+            updated_weights4 = model_mutate(new_weights2[1])
+            new_weights.append(updated_weights1)
+            new_weights.append(updated_weights2)
+            new_weights.append(updated_weights3)
+            new_weights.append(updated_weights4)
+        for select in range(len(new_weights)):
+            current_pool[select].set_weights(new_weights[select])
+        if generation % 15 == 1:
+            save_pool()
+        generation = generation + 1
+    current_model_idx = (current_model_idx + 1)%total_models
+    return
 
 
 def playerShm(playerShm):
@@ -432,8 +475,8 @@ def pixelCollision(rect1, rect2, hitmask1, hitmask2):
     x1, y1 = rect.x - rect1.x, rect.y - rect1.y
     x2, y2 = rect.x - rect2.x, rect.y - rect2.y
 
-    for x in xrange(rect.width):
-        for y in xrange(rect.height):
+    for x in range(rect.width):
+        for y in range(rect.height):
             if hitmask1[x1+x][y1+y] and hitmask2[x2+x][y2+y]:
                 return True
     return False
