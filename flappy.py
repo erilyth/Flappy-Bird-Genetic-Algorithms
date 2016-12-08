@@ -32,6 +32,7 @@ generation = 1
 def save_pool():
     for xi in range(total_models):
         current_pool[xi].save_weights("model_new" + str(xi) + ".keras")
+    print("Saved current pool!")
 
 def model_crossover(model_idx1, model_idx2):
     global current_pool
@@ -428,8 +429,7 @@ def showGameOverScreen(crashInfo):
     for select in range(len(new_weights)):
         fitness[select] = -100
         current_pool[select].set_weights(new_weights[select])
-    if generation % 30 == 1:
-        save_pool()
+    save_pool()
     generation = generation + 1
     return
 
