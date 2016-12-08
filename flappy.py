@@ -20,7 +20,7 @@ BASEY        = SCREENHEIGHT * 0.79
 # image, sound and hitmask  dicts
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 
-load_saved_pool = 0
+load_saved_pool = 1
 current_pool = []
 fitness = []
 current_model_idx = 0
@@ -47,12 +47,13 @@ def model_crossover(model_idx1, model_idx2):
 def model_mutate(weights):
     for xi in range(len(weights)):
         for yi in range(len(weights[xi])):
-            if random.uniform(0, 1) > 0.5:
-                change = random.uniform(-0.3,0.3)
+            if random.uniform(0, 1) > 0.85:
+                change = random.uniform(-0.5,0.5)
                 weights[xi][yi] += change
     return weights
 
-def predict_action(height, dist, pipe_height):
+def predict_action(height, dist, pipe_height, model_num):
+    global current_pool
     # The height, dist and pipe_height must be between 0 to 1 (Scaled by SCREENHEIGHT)
     height = min(SCREENHEIGHT, height) / SCREENHEIGHT - 0.5
     dist = dist / 450 - 0.5 # Max pipe distance from player will be 450
@@ -60,7 +61,7 @@ def predict_action(height, dist, pipe_height):
     # print(height, dist, pipe_height)
     neural_input = np.asarray([height, dist, pipe_height])
     neural_input = np.atleast_2d(neural_input)
-    output_prob = model.predict(neural_input, 1)[0]
+    output_prob = current_pool[model_num].predict(neural_input, 1)[0]
     print(output_prob)
     if output_prob[0] <= 0.5:
         # Perform the jump action
@@ -257,10 +258,20 @@ def mainGame(movementInfo):
 
 
     while True:
+        if playery < 0:
+            return {
+                'y': playery,
+                'groundCrash': crashTest[1],
+                'basex': basex,
+                'upperPipes': upperPipes,
+                'lowerPipes': lowerPipes,
+                'score': score,
+                'playerVelY': playerVelY,
+            }
         print(current_model_idx, fitness[current_model_idx], playery, next_pipe_x - int(SCREENWIDTH * 0.2), next_pipe_hole_y, generation)
         fitness[current_model_idx] += 1
         next_pipe_x += pipeVelX
-        if predict_action(playery, next_pipe_x, next_pipe_hole_y) == 1:
+        if predict_action(playery, next_pipe_x, next_pipe_hole_y, current_model_idx) == 1:
             if playery > -2 * IMAGES['player'][0].get_height():
                 playerVelY = playerFlapAcc
                 playerFlapped = True
@@ -293,13 +304,14 @@ def mainGame(movementInfo):
         pipe_idx = 0
         playerMidPos = playerx
         for pipe in upperPipes:
-            pipe_idx += 1
             pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width()
             if pipeMidPos <= playerMidPos < pipeMidPos + 4:
                 next_pipe_x = lowerPipes[pipe_idx+1]['x']
                 next_pipe_hole_y = (lowerPipes[pipe_idx+1]['y'] + (upperPipes[pipe_idx+1]['y'] + IMAGES['pipe'][pipe_idx+1].get_height())) / 2
                 score += 1
+                fitness[current_model_idx] += 25
                 SOUNDS['point'].play()
+            pipe_idx += 1
 
         # playerIndex basex change
         if (loopIter + 1) % 3 == 0:
@@ -357,31 +369,36 @@ def showGameOverScreen(crashInfo):
     if current_model_idx == total_models - 1:
         # One generation done, perform updates
         best_models = []
-        for select in range(5): # Assuming we have 12 nets in the pool
-            best_idx = -1
-            best_fitness = -100
-            for idx in range(total_models):
-                if fitness[idx] > best_fitness:
-                    best_fitness = fitness[idx]
-                    best_idx = idx
-            best_models.append(best_idx)
-            fitness[best_idx] = -100
-        for select in range(3):
+        total_fitness = 0
+        for select in range(total_models):
+            total_fitness += fitness[select]
+        for select in range(total_models):
+            fitness[select] /= total_fitness
+            if select > 0:
+                fitness[select] += fitness[select-1]
+        print(fitness)
+        print('yoyo')
+        for select in range(int(total_models/2)):
+            parent1 = random.uniform(0, 1)
+            parent2 = random.uniform(0, 1)
+            idx1 = -1
+            idx2 = -1
+            for idxx in range(total_models):
+                if fitness[idxx] >= parent1:
+                    idx1 = idxx
+                    break
+            for idxx in range(total_models):
+                if fitness[idxx] >= parent2:
+                    idx2 = idxx
+                    break
             # Choose the two best models and crossover with the next 3 to get 12 offsprings
-            idx1 = best_models[0]
-            idx2 = best_models[1]
-            idx3 = best_models[2 + select]
-            new_weights1 = model_crossover(idx1, idx3)
-            new_weights2 = model_crossover(idx2, idx3)
+            new_weights1 = model_crossover(idx1, idx2)
             updated_weights1 = model_mutate(new_weights1[0])
             updated_weights2 = model_mutate(new_weights1[1])
-            updated_weights3 = model_mutate(new_weights2[0])
-            updated_weights4 = model_mutate(new_weights2[1])
             new_weights.append(updated_weights1)
             new_weights.append(updated_weights2)
-            new_weights.append(updated_weights3)
-            new_weights.append(updated_weights4)
         for select in range(len(new_weights)):
+            fitness[select] = -100
             current_pool[select].set_weights(new_weights[select])
         if generation % 15 == 1:
             save_pool()
