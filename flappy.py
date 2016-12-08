@@ -23,8 +23,7 @@ IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 load_saved_pool = 1
 current_pool = []
 fitness = []
-current_model_idx = 0
-total_models = 12
+total_models = 50
 
 next_pipe_x = -1
 next_pipe_hole_y = -1
@@ -32,7 +31,7 @@ generation = 1
 
 def save_pool():
     for xi in range(total_models):
-        current_pool[xi].save_weights("model" + str(xi) + ".keras")
+        current_pool[xi].save_weights("model_new" + str(xi) + ".keras")
 
 def model_crossover(model_idx1, model_idx2):
     global current_pool
@@ -62,7 +61,7 @@ def predict_action(height, dist, pipe_height, model_num):
     neural_input = np.asarray([height, dist, pipe_height])
     neural_input = np.atleast_2d(neural_input)
     output_prob = current_pool[model_num].predict(neural_input, 1)[0]
-    print(output_prob)
+    #print(output_prob)
     if output_prob[0] <= 0.5:
         # Perform the jump action
         return 1
@@ -83,7 +82,7 @@ for i in range(total_models):
 
 if load_saved_pool:
     for i in range(total_models):
-        current_pool[i].load_weights("model"+str(i)+".keras")
+        current_pool[i].load_weights("model_new"+str(i)+".keras")
 
 for i in range(total_models):
     print(current_pool[i].get_weights())
@@ -200,8 +199,8 @@ def main():
 
         movementInfo = showWelcomeAnimation()
         global fitness
-        global current_model_idx
-        fitness[current_model_idx] = 0
+        for idx in range(total_models):
+            fitness[idx] = 0
         crashInfo = mainGame(movementInfo)
         showGameOverScreen(crashInfo)
 
@@ -216,11 +215,14 @@ def showWelcomeAnimation():
 
 def mainGame(movementInfo):
     global fitness
-    global current_model_idx
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
-    playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
-
+    playersXList = []
+    playersYList = []
+    for idx in range(total_models):
+        playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
+        playersXList.append(playerx)
+        playersYList.append(playery)
     basex = movementInfo['basex']
     baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
@@ -249,47 +251,71 @@ def mainGame(movementInfo):
     pipeVelX = -4
 
     # player velocity, max velocity, downward accleration, accleration on flap
-    playerVelY    =  -9   # player's velocity along Y, default same as playerFlapped
+    playersVelY    =  []   # player's velocity along Y, default same as playerFlapped
     playerMaxVelY =  10   # max vel along Y, max descend speed
     playerMinVelY =  -8   # min vel along Y, max ascend speed
-    playerAccY    =   1   # players downward accleration
+    playersAccY    =  []   # players downward accleration
     playerFlapAcc =  -9   # players speed on flapping
-    playerFlapped = False # True when player flaps
+    playersFlapped = [] # True when player flaps
+    playersState = []
+
+    for idx in range(total_models):
+        playersVelY.append(-9)
+        playersAccY.append(1)
+        playersFlapped.append(False)
+        playersState.append(True)
+
+    alive_players = total_models
 
 
     while True:
-        if playery < 0:
+        for idxPlayer in range(total_models):
+            if playersYList[idxPlayer] < 0 and playersState[idxPlayer] == True:
+                alive_players -= 1
+                playersState[idxPlayer] = False
+        print(alive_players)
+        if alive_players == 0:
             return {
-                'y': playery,
-                'groundCrash': crashTest[1],
+                'y': 0,
+                'groundCrash': True,
                 'basex': basex,
                 'upperPipes': upperPipes,
                 'lowerPipes': lowerPipes,
                 'score': score,
-                'playerVelY': playerVelY,
+                'playerVelY': 0,
             }
-        print(current_model_idx, fitness[current_model_idx], playery, next_pipe_x - int(SCREENWIDTH * 0.2), next_pipe_hole_y, generation)
-        fitness[current_model_idx] += 1
+        print(fitness, generation)
+        for idxPlayer in range(total_models):
+            if playersState[idxPlayer] == True:
+                fitness[idxPlayer] += 1
         next_pipe_x += pipeVelX
-        if predict_action(playery, next_pipe_x, next_pipe_hole_y, current_model_idx) == 1:
-            if playery > -2 * IMAGES['player'][0].get_height():
-                playerVelY = playerFlapAcc
-                playerFlapped = True
-                #SOUNDS['wing'].play()
+        for idxPlayer in range(total_models):
+            if playersState[idxPlayer] == True:
+                if predict_action(playersYList[idxPlayer], next_pipe_x, next_pipe_hole_y, idxPlayer) == 1:
+                    if playersYList[idxPlayer] > -2 * IMAGES['player'][0].get_height():
+                        playersVelY[idxPlayer] = playerFlapAcc
+                        playersFlapped[idxPlayer] = True
+                        #SOUNDS['wing'].play()
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 pygame.quit()
                 sys.exit()
-            if (event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP)):
+            """if (event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP)):
                 if playery > -2 * IMAGES['player'][0].get_height():
                     playerVelY = playerFlapAcc
                     playerFlapped = True
                     SOUNDS['wing'].play()
+            """
 
-        # check for crash here
-        crashTest = checkCrash({'x': playerx, 'y': playery, 'index': playerIndex},
+        # check for crash here, returns status list
+        crashTest = checkCrash({'x': playersXList, 'y': playersYList, 'index': playerIndex},
                                upperPipes, lowerPipes)
-        if crashTest[0]:
+
+        for idx in range(total_models):
+            if playersState[idx] == True and crashTest[idx] == True:
+                alive_players -= 1
+                playersState[idx] = False
+        if alive_players == 0:
             return {
                 'y': playery,
                 'groundCrash': crashTest[1],
@@ -297,21 +323,23 @@ def mainGame(movementInfo):
                 'upperPipes': upperPipes,
                 'lowerPipes': lowerPipes,
                 'score': score,
-                'playerVelY': playerVelY,
+                'playerVelY': 0,
             }
 
         # check for score
-        pipe_idx = 0
-        playerMidPos = playerx
-        for pipe in upperPipes:
-            pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width()
-            if pipeMidPos <= playerMidPos < pipeMidPos + 4:
-                next_pipe_x = lowerPipes[pipe_idx+1]['x']
-                next_pipe_hole_y = (lowerPipes[pipe_idx+1]['y'] + (upperPipes[pipe_idx+1]['y'] + IMAGES['pipe'][pipe_idx+1].get_height())) / 2
-                score += 1
-                fitness[current_model_idx] += 25
-                SOUNDS['point'].play()
-            pipe_idx += 1
+        for idx in range(total_models):
+            if playersState[idx] == True:
+                pipe_idx = 0
+                playerMidPos = playersXList[idx]
+                for pipe in upperPipes:
+                    pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width()
+                    if pipeMidPos <= playerMidPos < pipeMidPos + 4:
+                        next_pipe_x = lowerPipes[pipe_idx+1]['x']
+                        next_pipe_hole_y = (lowerPipes[pipe_idx+1]['y'] + (upperPipes[pipe_idx+1]['y'] + IMAGES['pipe'][pipe_idx+1].get_height())) / 2
+                        score += 1
+                        fitness[idx] += 25
+                        # SOUNDS['point'].play()
+                    pipe_idx += 1
 
         # playerIndex basex change
         if (loopIter + 1) % 3 == 0:
@@ -320,12 +348,14 @@ def mainGame(movementInfo):
         basex = -((-basex + 100) % baseShift)
 
         # player's movement
-        if playerVelY < playerMaxVelY and not playerFlapped:
-            playerVelY += playerAccY
-        if playerFlapped:
-            playerFlapped = False
-        playerHeight = IMAGES['player'][playerIndex].get_height()
-        playery += min(playerVelY, BASEY - playery - playerHeight)
+        for idx in range(total_models):
+            if playersState[idx] == True:
+                if playersVelY[idx] < playerMaxVelY and not playersFlapped[idx]:
+                    playersVelY[idx] += playersAccY[idx]
+                if playersFlapped[idx]:
+                    playersFlapped[idx] = False
+                playerHeight = IMAGES['player'][playerIndex].get_height()
+                playersYList[idx] += min(playersVelY[idx], BASEY - playersYList[idx] - playerHeight)
 
         # move pipes to left
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
@@ -353,7 +383,9 @@ def mainGame(movementInfo):
         SCREEN.blit(IMAGES['base'], (basex, BASEY))
         # print score so player overlaps the score
         showScore(score)
-        SCREEN.blit(IMAGES['player'][playerIndex], (playerx, playery))
+        for idx in range(total_models):
+            if playersState[idx] == True:
+                SCREEN.blit(IMAGES['player'][playerIndex], (playersXList[idx], playersYList[idx]))
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
@@ -361,61 +393,45 @@ def mainGame(movementInfo):
 
 def showGameOverScreen(crashInfo):
     """Perform genetic updates here"""
-    global current_model_idx
     global current_pool
     global fitness
     global generation
     new_weights = []
-    if current_model_idx == total_models - 1:
-        # One generation done, perform updates
-        best_models = []
-        total_fitness = 0
-        for select in range(total_models):
-            total_fitness += fitness[select]
-        for select in range(total_models):
-            fitness[select] /= total_fitness
-            if select > 0:
-                fitness[select] += fitness[select-1]
-        print(fitness)
-        print('yoyo')
-        for select in range(int(total_models/2)):
-            parent1 = random.uniform(0, 1)
-            parent2 = random.uniform(0, 1)
-            idx1 = -1
-            idx2 = -1
-            for idxx in range(total_models):
-                if fitness[idxx] >= parent1:
-                    idx1 = idxx
-                    break
-            for idxx in range(total_models):
-                if fitness[idxx] >= parent2:
-                    idx2 = idxx
-                    break
-            # Choose the two best models and crossover with the next 3 to get 12 offsprings
-            new_weights1 = model_crossover(idx1, idx2)
-            updated_weights1 = model_mutate(new_weights1[0])
-            updated_weights2 = model_mutate(new_weights1[1])
-            new_weights.append(updated_weights1)
-            new_weights.append(updated_weights2)
-        for select in range(len(new_weights)):
-            fitness[select] = -100
-            current_pool[select].set_weights(new_weights[select])
-        if generation % 15 == 1:
-            save_pool()
-        generation = generation + 1
-    current_model_idx = (current_model_idx + 1)%total_models
+    total_fitness = 0
+    for select in range(total_models):
+        total_fitness += fitness[select]
+    for select in range(total_models):
+        fitness[select] /= total_fitness
+        if select > 0:
+            fitness[select] += fitness[select-1]
+    print(fitness)
+    print('yoyo')
+    for select in range(int(total_models/2)):
+        parent1 = random.uniform(0, 1)
+        parent2 = random.uniform(0, 1)
+        idx1 = -1
+        idx2 = -1
+        for idxx in range(total_models):
+            if fitness[idxx] >= parent1:
+                idx1 = idxx
+                break
+        for idxx in range(total_models):
+            if fitness[idxx] >= parent2:
+                idx2 = idxx
+                break
+        # Choose the two best models and crossover with the next 3 to get 12 offsprings
+        new_weights1 = model_crossover(idx1, idx2)
+        updated_weights1 = model_mutate(new_weights1[0])
+        updated_weights2 = model_mutate(new_weights1[1])
+        new_weights.append(updated_weights1)
+        new_weights.append(updated_weights2)
+    for select in range(len(new_weights)):
+        fitness[select] = -100
+        current_pool[select].set_weights(new_weights[select])
+    if generation % 30 == 1:
+        save_pool()
+    generation = generation + 1
     return
-
-
-def playerShm(playerShm):
-    """oscillates the value of playerShm['val'] between 8 and -8"""
-    if abs(playerShm['val']) == 8:
-        playerShm['dir'] *= -1
-
-    if playerShm['dir'] == 1:
-         playerShm['val'] += 1
-    else:
-        playerShm['val'] -= 1
 
 
 def getRandomPipe():
@@ -447,19 +463,22 @@ def showScore(score):
         Xoffset += IMAGES['numbers'][digit].get_width()
 
 
-def checkCrash(player, upperPipes, lowerPipes):
+def checkCrash(players, upperPipes, lowerPipes):
     """returns True if player collders with base or pipes."""
-    pi = player['index']
-    player['w'] = IMAGES['player'][0].get_width()
-    player['h'] = IMAGES['player'][0].get_height()
+    statuses = []
+    for idx in range(total_models):
+        statuses.append(False)
 
-    # if player crashes into ground
-    if player['y'] + player['h'] >= BASEY - 1:
-        return [True, True]
-    else:
-
-        playerRect = pygame.Rect(player['x'], player['y'],
-                      player['w'], player['h'])
+    for idx in range(total_models):
+        statuses[idx] = False
+        pi = players['index']
+        players['w'] = IMAGES['player'][0].get_width()
+        players['h'] = IMAGES['player'][0].get_height()
+        # if player crashes into ground
+        if players['y'][idx] + players['h'] >= BASEY - 1:
+            statuses[idx] = True
+        playerRect = pygame.Rect(players['x'][idx], players['y'][idx],
+                      players['w'], players['h'])
         pipeW = IMAGES['pipe'][0].get_width()
         pipeH = IMAGES['pipe'][0].get_height()
 
@@ -478,9 +497,8 @@ def checkCrash(player, upperPipes, lowerPipes):
             lCollide = pixelCollision(playerRect, lPipeRect, pHitMask, lHitmask)
 
             if uCollide or lCollide:
-                return [True, False]
-
-    return [False, False]
+                statuses[idx] = True
+    return statuses
 
 def pixelCollision(rect1, rect2, hitmask1, hitmask2):
     """Checks if two objects collide and not just their rects"""
