@@ -21,6 +21,7 @@ BASEY        = SCREENHEIGHT * 0.79
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 
 load_saved_pool = 1
+save_current_pool = 1
 current_pool = []
 fitness = []
 total_models = 50
@@ -31,7 +32,7 @@ generation = 1
 
 def save_pool():
     for xi in range(total_models):
-        current_pool[xi].save_weights("model_new" + str(xi) + ".keras")
+        current_pool[xi].save_weights("Current_Model_Pool/model_new" + str(xi) + ".keras")
     print("Saved current pool!")
 
 def model_crossover(model_idx1, model_idx2):
@@ -83,7 +84,7 @@ for i in range(total_models):
 
 if load_saved_pool:
     for i in range(total_models):
-        current_pool[i].load_weights("model_new"+str(i)+".keras")
+        current_pool[i].load_weights("Current_Model_Pool/model_new"+str(i)+".keras")
 
 for i in range(total_models):
     print(current_pool[i].get_weights())
@@ -429,7 +430,8 @@ def showGameOverScreen(crashInfo):
     for select in range(len(new_weights)):
         fitness[select] = -100
         current_pool[select].set_weights(new_weights[select])
-    save_pool()
+    if save_current_pool == 1:
+        save_pool()
     generation = generation + 1
     return
 
