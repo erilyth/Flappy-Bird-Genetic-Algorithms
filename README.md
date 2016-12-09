@@ -1,8 +1,8 @@
-# Flappy Bird Genetic Algorithm
+# Flappy Bird Genetic Evolution
 Train a neural network using genetic evolution to play flappy bird! 
 
 ## Final Results
-![Trained Model](Screenshots/trained_final.gif?raw=true "Trained Flappy Bird")
+![Trained Model](Screenshots/trained_final.gif?raw=true "Trained Flappy Bird")	
 
 ## Algorithm Details
 * Starts out with a pool of 50 models
@@ -13,18 +13,22 @@ Train a neural network using genetic evolution to play flappy bird!
 ## Progress Screenshots
 #### Stage 1
 Initially all the models would do the "same" wrong thing. So they would all die out quickly.
+
 ![Untrained No-Spread](Screenshots/untrained_initial_states_nospread.gif?raw=true "Untrained No-Spread")
 
 #### Stage 2
 After some time however, they would start to show more variation, but still perform the wrong moves. This gives us a spread of flappy birds throughout the screen (lengthwise).
+
 ![Untrained Spread](Screenshots/untrained_initial_states_spread.gif?raw=true "Untrained Spread")
 
 #### Stage 3
 After a bit of training (~1hr) the spread decreases and is more concentrated at the height where there is a hole in the pipes. They start performing a lot better since they now understand when to flap and when not to.
+
 ![Trained](Screenshots/trained_set_initial.gif?raw=true "Trained")
 
 #### Stage 4
-Considering the model with the maximum fitness, we can consider it as a trained model and it would perform much better than the average human.
+The model with the maximum fitness can be considered as a trained model and it would perform much better than the average human.
+
 ![Final Trained Model](Screenshots/trained_final.gif?raw=true "Final Trained Model")
 
 ### Disclaimer
