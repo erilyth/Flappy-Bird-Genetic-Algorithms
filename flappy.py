@@ -415,7 +415,6 @@ def showGameOverScreen(crashInfo):
             if fitness[idxx] >= parent2:
                 idx2 = idxx
                 break
-        # Choose the two best models and crossover with the next 3 to get 12 offsprings
         new_weights1 = model_crossover(idx1, idx2)
         updated_weights1 = model_mutate(new_weights1[0])
         updated_weights2 = model_mutate(new_weights1[1])
