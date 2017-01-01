@@ -59,11 +59,9 @@ def predict_action(height, dist, pipe_height, model_num):
     height = min(SCREENHEIGHT, height) / SCREENHEIGHT - 0.5
     dist = dist / 450 - 0.5 # Max pipe distance from player will be 450
     pipe_height = min(SCREENHEIGHT, pipe_height) / SCREENHEIGHT - 0.5
-    # print(height, dist, pipe_height)
     neural_input = np.asarray([height, dist, pipe_height])
     neural_input = np.atleast_2d(neural_input)
     output_prob = current_pool[model_num].predict(neural_input, 1)[0]
-    #print(output_prob)
     if output_prob[0] <= 0.5:
         # Perform the jump action
         return 1
@@ -275,7 +273,6 @@ def mainGame(movementInfo):
             if playersYList[idxPlayer] < 0 and playersState[idxPlayer] == True:
                 alive_players -= 1
                 playersState[idxPlayer] = False
-        print(alive_players)
         if alive_players == 0:
             return {
                 'y': 0,
@@ -286,7 +283,6 @@ def mainGame(movementInfo):
                 'score': score,
                 'playerVelY': 0,
             }
-        print(fitness, generation)
         for idxPlayer in range(total_models):
             if playersState[idxPlayer] == True:
                 fitness[idxPlayer] += 1
@@ -406,8 +402,6 @@ def showGameOverScreen(crashInfo):
         fitness[select] /= total_fitness
         if select > 0:
             fitness[select] += fitness[select-1]
-    print(fitness)
-    print('yoyo')
     for select in range(int(total_models/2)):
         parent1 = random.uniform(0, 1)
         parent2 = random.uniform(0, 1)
