@@ -12,8 +12,8 @@ from keras.layers import Dense, Activation
 from keras.optimizers import SGD
 
 FPS = 30
-SCREENWIDTH  = 288
-SCREENHEIGHT = 512
+SCREENWIDTH  = 288.0
+SCREENHEIGHT = 512.0
 # amount by which base can maximum shift to left
 PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
 BASEY        = SCREENHEIGHT * 0.79
@@ -127,7 +127,7 @@ def main():
     global SCREEN, FPSCLOCK
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
-    SCREEN = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
+    SCREEN = pygame.display.set_mode((int(SCREENWIDTH), int(SCREENHEIGHT)))
     pygame.display.set_caption('Flappy Bird')
 
     # numbers sprites for score display
