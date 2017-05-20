@@ -1,5 +1,5 @@
 # Flappy Bird Genetic Evolution
-Train a neural network using genetic evolution to play flappy bird! 
+Train a neural network using genetic evolution to play flappy bird! For a tutorial on how to get started with your own genetic algorithms, take a look ![here](https://threads-iiith.quora.com/Neuro-Evolution-with-Flappy-Bird-Genetic-Evolution-on-Neural-Networks).
 
 ## Final Results
 ![Trained Model](Screenshots/trained_final.gif?raw=true "Trained Flappy Bird")	
